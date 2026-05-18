@@ -99,12 +99,14 @@ public class AIRefactorController {
 
         Map<String, Object> requestMap = new HashMap<>();
         requestMap.put("model", model);
-        requestMap.put("temperature", 0.2);
+        requestMap.put("temperature", 0.3);
         requestMap.put("max_tokens", 1000);
         
         Map<String, String> systemMessage = new HashMap<>();
         systemMessage.put("role", "system");
-        systemMessage.put("content", "You are a code assistant. Always return results exactly as requested. If JSON is requested, return only valid JSON with no additional text.");
+        systemMessage.put("content", "You are an expert Java refactoring assistant specializing in eliminating code smells without introducing new ones. " +
+                "You must follow SOLID principles and avoid creating Data Classes (classes with only getters/setters), God Classes, or other anti-patterns. " +
+                "Always return valid JSON with no additional text. Focus on improving code quality while maintaining functionality.");
         
         Map<String, String> userMessage = new HashMap<>();
         userMessage.put("role", "user");
@@ -153,7 +155,9 @@ public class AIRefactorController {
         
         Map<String, String> systemMessage = new HashMap<>();
         systemMessage.put("role", "system");
-        systemMessage.put("content", "You are a code assistant. Always return results exactly as requested. If JSON is requested, return only valid JSON with no additional text.");
+        systemMessage.put("content", "You are an expert Java refactoring assistant specializing in eliminating code smells without introducing new ones. " +
+                "You must follow SOLID principles and avoid creating Data Classes (classes with only getters/setters), God Classes, or other anti-patterns. " +
+                "Always return valid JSON with no additional text. Focus on improving code quality while maintaining functionality.");
         
         Map<String, String> userMessage = new HashMap<>();
         userMessage.put("role", "user");
@@ -162,7 +166,7 @@ public class AIRefactorController {
         requestMap.put("messages", java.util.Arrays.asList(systemMessage, userMessage));
         
         Map<String, Object> options = new HashMap<>();
-        options.put("temperature", 0.2);
+        options.put("temperature", 0.3);
         options.put("num_predict", 500);
         requestMap.put("options", options);
         
@@ -243,14 +247,69 @@ public class AIRefactorController {
     private String buildRefactoringPrompt(String smellType, String fileName, 
                                          Integer startLine, Integer endLine, 
                                          String code, String message) {
+        String constraints = getRefactoringConstraints(smellType);
+        
         return String.format(
-            "Return ONLY valid JSON. No text before or after the JSON object.\n\n" +
-            "Refactor this Java code to fix: %s\n\n" +
-            "Code:\n%s\n\n" +
-            "Output format (JSON only):\n" +
-            "{\"refactoredCode\":\"fixed code\",\"explanation\":\"what changed\",\"howRemoved\":\"how smell was fixed\"}",
-            smellType, code
+            "You are a Java refactoring expert. Return ONLY valid JSON with no additional text.\n\n" +
+            "TASK: Fix the '%s' code smell in this Java code.\n\n" +
+            "CODE TO REFACTOR:\n%s\n\n" +
+            "CRITICAL CONSTRAINTS - DO NOT:\n%s\n\n" +
+            "REQUIREMENTS:\n" +
+            "1. Keep the same functionality\n" +
+            "2. Follow SOLID principles\n" +
+            "3. Maintain proper encapsulation\n" +
+            "4. Use meaningful names\n" +
+            "5. Keep classes focused and cohesive\n\n" +
+            "OUTPUT FORMAT (JSON only):\n" +
+            "{\"refactoredCode\":\"complete refactored code\",\"explanation\":\"brief explanation of changes\",\"howRemoved\":\"how the %s smell was eliminated\"}",
+            smellType, code, constraints, smellType
         );
+    }
+    
+    private String getRefactoringConstraints(String smellType) {
+        switch (smellType) {
+            case "LongMethod":
+                return "- DO NOT create Data Classes (classes with only getters/setters)\n" +
+                       "- DO NOT create God Classes (classes doing too many things)\n" +
+                       "- Extract methods with clear single responsibilities\n" +
+                       "- Keep extracted methods in the same class if they use the same data\n" +
+                       "- Only create new classes if there's a clear separate responsibility";
+            
+            case "LargeClass":
+            case "GodClass":
+                return "- DO NOT create Data Classes\n" +
+                       "- Split by cohesive responsibilities\n" +
+                       "- Each new class should have behavior, not just data\n" +
+                       "- Maintain proper encapsulation with private fields";
+            
+            case "LongParameterList":
+                return "- DO NOT create Data Classes\n" +
+                       "- Use Parameter Objects only if parameters are cohesive\n" +
+                       "- Add behavior to parameter objects\n" +
+                       "- Consider Builder pattern for complex construction";
+            
+            case "DataClass":
+                return "- Add business logic methods to the class\n" +
+                       "- Move related behavior from other classes\n" +
+                       "- Encapsulate fields properly\n" +
+                       "- DO NOT just rename the class";
+            
+            case "FeatureEnvy":
+                return "- Move the method to the class it envies\n" +
+                       "- DO NOT create unnecessary wrapper classes\n" +
+                       "- Keep related data and behavior together";
+            
+            case "DuplicateCode":
+                return "- Extract to a well-named method\n" +
+                       "- DO NOT create utility classes for single-use methods\n" +
+                       "- Place extracted method where it logically belongs";
+            
+            default:
+                return "- Follow SOLID principles\n" +
+                       "- DO NOT introduce new code smells\n" +
+                       "- Keep classes cohesive and focused\n" +
+                       "- Maintain proper encapsulation";
+        }
     }
 
     private Map<String, String> parseAiResponse(String response) {

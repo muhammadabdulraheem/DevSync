@@ -547,4 +547,66 @@ public class CodeAnalysisController {
             return ResponseEntity.internalServerError().body(errorResponse);
         }
     }
+    
+    @PostMapping("/generate-pdf-report")
+    public ResponseEntity<byte[]> generatePDFReport(
+            @RequestParam("projectPath") String projectPath,
+            @RequestParam("userId") String userId) {
+        
+        System.out.println("📄 POST /api/upload/generate-pdf-report endpoint called");
+        System.out.println("   Project Path: " + projectPath);
+        System.out.println("   User ID: " + userId);
+        
+        try {
+            // Verify user owns this project
+            List<AnalysisHistory> userHistory = analysisHistoryRepository.findByUserIdOrderByAnalysisDateDesc(userId);
+            boolean hasAccess = userHistory.stream()
+                .anyMatch(history -> history.getProjectPath() != null && history.getProjectPath().equals(projectPath));
+            
+            if (!hasAccess) {
+                System.err.println("❌ Access denied - project not found in user history");
+                return ResponseEntity.status(403).build();
+            }
+            
+            // Check if project directory exists
+            File projectDir = new File(projectPath);
+            if (!projectDir.exists() || !projectDir.isDirectory()) {
+                System.err.println("❌ Project directory not found: " + projectPath);
+                return ResponseEntity.badRequest().build();
+            }
+            
+            System.out.println("✅ Access granted, generating enhanced PDF report...");
+            
+            // Analyze project
+            VisualDependencyAnalyzer analyzer = new VisualDependencyAnalyzer();
+            Map<String, Object> analysisResults = analyzer.analyzeProject(projectPath);
+            
+            // Generate diagram
+            PlantUMLGenerator plantUMLGenerator = new PlantUMLGenerator();
+            String plantUMLText = plantUMLGenerator.generatePackageDiagram(analysisResults);
+            byte[] diagramPNG = plantUMLGenerator.generateDiagramPNG(plantUMLText);
+            
+            // Generate enhanced PDF report
+            VisualReportGenerator reportGenerator = new VisualReportGenerator();
+            String projectName = projectDir.getName();
+            byte[] pdfBytes = reportGenerator.generateVisualArchitectureReport(analysisResults, diagramPNG, projectName);
+            
+            System.out.println("✅ Enhanced PDF report generated successfully (" + pdfBytes.length + " bytes)");
+            
+            // Return PDF as downloadable file
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_PDF);
+            headers.setContentDispositionFormData("attachment", projectName + "_Architecture_Report.pdf");
+            headers.setCacheControl("must-revalidate, post-check=0, pre-check=0");
+            
+            return ResponseEntity.ok()
+                .headers(headers)
+                .body(pdfBytes);
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.err.println("❌ Failed to generate PDF report: " + e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
 }
