@@ -13,3 +13,7 @@ public class DevsyncApplication {
     }
 
 }
+//@CrossOrigin(origins = "http://localhost:5173")
+//if system not worked as expected
+//to
+//@CrossOrigin(origins = {"http://localhost:5173", "https://vecil oen app.app"})

@@ -41,12 +41,24 @@ public class VisualDependencyAnalyzer {
                 analyzeDependencies(javaFile);
             }
             
+            // NEW: Design Pattern Detection
+            DesignPatternDetector patternDetector = new DesignPatternDetector(classes);
+            List<DesignPatternDetector.PatternInstance> patterns = patternDetector.detectPatterns(projectPath);
+            
+            // NEW: Code Metrics Calculation
+            CodeMetricsCalculator metricsCalculator = new CodeMetricsCalculator(classes, dependencies);
+            Map<String, Object> metrics = metricsCalculator.calculateMetrics();
+            
             Map<String, Object> result = new HashMap<>();
             result.put("classes", classes);
             result.put("dependencies", dependencies);
             result.put("projectPackages", projectPackages);
             result.put("totalClasses", classes.size());
             result.put("totalDependencies", dependencies.size());
+            
+            // NEW: Add advanced features
+            result.put("designPatterns", patterns);
+            result.put("codeMetrics", metrics);
             
             return result;
             

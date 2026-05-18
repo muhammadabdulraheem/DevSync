@@ -402,4 +402,149 @@ public class CodeAnalysisController {
             return ResponseEntity.internalServerError().body(errorResponse);
         }
     }
+    
+    @PostMapping("/visual-from-path")
+    public ResponseEntity<Map<String, Object>> generateVisualReportFromPath(
+            @RequestParam("projectPath") String projectPath,
+            @RequestParam("userId") String userId) {
+        System.out.println("📊 POST /api/upload/visual-from-path endpoint called");
+        System.out.println("   Project Path: " + projectPath);
+        System.out.println("   User ID: " + userId);
+        
+        if (adminSettingsService.isMaintenanceMode()) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "System is under maintenance");
+            return ResponseEntity.status(503).body(errorResponse);
+        }
+        
+        try {
+            // Verify user owns this project
+            List<AnalysisHistory> userHistory = analysisHistoryRepository.findByUserIdOrderByAnalysisDateDesc(userId);
+            boolean hasAccess = userHistory.stream()
+                .anyMatch(history -> history.getProjectPath() != null && history.getProjectPath().equals(projectPath));
+            
+            if (!hasAccess) {
+                System.err.println("❌ Access denied - project not found in user history");
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Access denied to this project");
+                return ResponseEntity.status(403).body(errorResponse);
+            }
+            
+            // Check if project directory exists
+            File projectDir = new File(projectPath);
+            if (!projectDir.exists() || !projectDir.isDirectory()) {
+                System.err.println("❌ Project directory not found: " + projectPath);
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Project directory not found");
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+            
+            System.out.println("✅ Access granted, generating visual report...");
+            
+            // Generate visual report from existing project
+            VisualDependencyAnalyzer analyzer = new VisualDependencyAnalyzer();
+            Map<String, Object> analysisResults = analyzer.analyzeProject(projectPath);
+            
+            PlantUMLGenerator plantUMLGenerator = new PlantUMLGenerator();
+            
+            // Generate package-level diagram (Level 1)
+            String packageDiagramText = plantUMLGenerator.generatePackageDiagram(analysisResults);
+            byte[] packageDiagramPNG = plantUMLGenerator.generateDiagramPNG(packageDiagramText);
+            String packageDiagramBase64 = java.util.Base64.getEncoder().encodeToString(packageDiagramPNG);
+            
+            // Generate full diagram (for backward compatibility)
+            String plantUMLText = plantUMLGenerator.generatePlantUMLText(analysisResults);
+            byte[] diagramPNG = plantUMLGenerator.generateDiagramPNG(plantUMLText);
+            String diagramBase64 = java.util.Base64.getEncoder().encodeToString(diagramPNG);
+            
+            // Get project name from path
+            String projectName = projectDir.getName();
+            
+            // Add projectPath to analysisResults for frontend use
+            analysisResults.put("projectPath", projectPath);
+            
+            // Prepare response data
+            Map<String, Object> response = new HashMap<>();
+            response.put("projectName", projectName);
+            response.put("analysisResults", analysisResults);
+            response.put("diagramBase64", diagramBase64);
+            response.put("packageDiagramBase64", packageDiagramBase64);
+            response.put("plantUMLText", plantUMLText);
+            response.put("packageDiagramText", packageDiagramText);
+            
+            System.out.println("✅ Visual report generated successfully");
+            return ResponseEntity.ok(response);
+                
+        } catch (Exception e) {
+            e.printStackTrace();
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed to generate visual report: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
+    
+    @PostMapping("/generate-diagram")
+    public ResponseEntity<Map<String, Object>> generateDiagram(
+            @RequestParam("projectPath") String projectPath,
+            @RequestParam("userId") String userId,
+            @RequestParam("level") String level,
+            @RequestParam(value = "packageName", required = false) String packageName,
+            @RequestParam(value = "className", required = false) String className) {
+        
+        try {
+            // Verify user owns this project
+            List<AnalysisHistory> userHistory = analysisHistoryRepository.findByUserIdOrderByAnalysisDateDesc(userId);
+            boolean hasAccess = userHistory.stream()
+                .anyMatch(history -> history.getProjectPath() != null && history.getProjectPath().equals(projectPath));
+            
+            if (!hasAccess) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "Access denied");
+                return ResponseEntity.status(403).body(errorResponse);
+            }
+            
+            // Analyze project
+            VisualDependencyAnalyzer analyzer = new VisualDependencyAnalyzer();
+            Map<String, Object> analysisResults = analyzer.analyzeProject(projectPath);
+            
+            PlantUMLGenerator plantUMLGenerator = new PlantUMLGenerator();
+            String diagramText;
+            
+            // Generate diagram based on level
+            switch (level) {
+                case "package":
+                    diagramText = plantUMLGenerator.generatePackageDiagram(analysisResults);
+                    break;
+                case "packageClasses":
+                    if (packageName == null) {
+                        throw new IllegalArgumentException("packageName required for packageClasses level");
+                    }
+                    diagramText = plantUMLGenerator.generatePackageClassDiagram(analysisResults, packageName);
+                    break;
+                case "classFocus":
+                    if (className == null) {
+                        throw new IllegalArgumentException("className required for classFocus level");
+                    }
+                    diagramText = plantUMLGenerator.generateClassFocusDiagram(analysisResults, className);
+                    break;
+                default:
+                    diagramText = plantUMLGenerator.generatePlantUMLText(analysisResults);
+            }
+            
+            byte[] diagramPNG = plantUMLGenerator.generateDiagramPNG(diagramText);
+            String diagramBase64 = java.util.Base64.getEncoder().encodeToString(diagramPNG);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("diagramBase64", diagramBase64);
+            response.put("diagramText", diagramText);
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Failed to generate diagram: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(errorResponse);
+        }
+    }
 }

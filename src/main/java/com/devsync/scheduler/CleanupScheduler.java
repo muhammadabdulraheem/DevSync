@@ -20,7 +20,7 @@ public class CleanupScheduler {
     @Autowired
     private FileStorageService fileStorageService;
     
-    // Run every day at 2 AM
+
     @Scheduled(cron = "0 0 2 * * *")
     public void cleanupOldReports() {
         System.out.println("🧹 Starting automatic cleanup of old reports...");
